@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: library-backend
+  datasource:
+    url: ${LIBRARY_DB_URL:jdbc:oracle:thin:@//127.0.0.1:1521/ljw4}
+    username: ${LIBRARY_DB_USERNAME:LIBRARY_APP}
+    password: ${LIBRARY_DB_PASSWORD:}
+    driver-class-name: oracle.jdbc.OracleDriver
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
