@@ -11,13 +11,6 @@ library-system/
 └── frontend/       Vue 3 管理界面
 ```
 
-## 本机 Oracle 环境
-
-- Oracle Home：`D:\app\humber\product\12.1.0\dbhome_1`
-- 监听地址：`127.0.0.1:1521`
-- 推荐服务名：`ljw4`
-- 应用数据库用户：`LIBRARY_APP`
-
 数据库密码和 JWT 密钥均通过环境变量传入，不写入仓库。
 
 ## 初始化数据库
@@ -35,11 +28,14 @@ $env:LIBRARY_DB_PASSWORD = "请设置强密码"
 
 ```powershell
 $env:LIBRARY_DB_PASSWORD = "与初始化时一致的密码"
+$env:LIBRARY_AUTH_SECRET = "请设置至少 32 位的随机签名密钥"
 cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
-后端默认地址：`http://localhost:8080/api`
+除 `/api/auth/login` 与健康检查外，后端接口均要求携带登录返回的 Bearer Token。令牌默认有效期为 8 小时。
+
+本地演示管理员账号为 `admin`。公开部署前必须修改管理员密码，并设置独立的 `LIBRARY_AUTH_SECRET`。
 
 ## 启动前端
 
@@ -48,6 +44,3 @@ cd frontend
 npm install
 npm run dev
 ```
-
-前端默认地址：`http://localhost:5173`
-
