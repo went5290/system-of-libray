@@ -5,6 +5,32 @@ const client = axios.create({
   timeout: 10000
 })
 
+let authToken = null
+let unauthorizedHandler = null
+
+client.interceptors.request.use(config => {
+  if (authToken) config.headers.Authorization = `Bearer ${authToken}`
+  return config
+})
+
+client.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401 && error.config?.url !== '/auth/login') {
+      unauthorizedHandler?.()
+    }
+    return Promise.reject(error)
+  }
+)
+
+export function setAuthToken(token) {
+  authToken = token || null
+}
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler
+}
+
 export async function login(credentials) {
   const response = await client.post('/auth/login', credentials)
   return response.data

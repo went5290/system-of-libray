@@ -2,13 +2,18 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Collection, List, Plus, Reading, Search, Switch, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { borrowBook, createBook, createBookCopy, createReader, getBookCategories, getOverview, login, payFine, renewBorrow, returnBook, searchBooks, searchBorrowRecords, searchReaders, updateReaderStatus } from './api'
+import { borrowBook, createBook, createBookCopy, createReader, getBookCategories, getOverview, login, payFine, renewBorrow, returnBook, searchBooks, searchBorrowRecords, searchReaders, setAuthToken, setUnauthorizedHandler, updateReaderStatus } from './api'
 
 const SESSION_KEY = 'library-console-user'
 
 function readSession() {
   try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null')
+    const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null')
+    if (!session?.token || !session?.expiresAt || new Date(session.expiresAt) <= new Date()) {
+      localStorage.removeItem(SESSION_KEY)
+      return null
+    }
+    return session
   } catch {
     return null
   }
@@ -24,6 +29,14 @@ function saveSession(user) {
 }
 
 const currentUser = ref(readSession())
+setAuthToken(currentUser.value?.token)
+setUnauthorizedHandler(() => {
+  currentUser.value = null
+  setAuthToken(null)
+  saveSession(null)
+  activeSection.value = 'overview'
+  ElMessage.warning('登录已失效，请重新登录')
+})
 const loginSubmitting = ref(false)
 const loginFormRef = ref()
 const books = ref([])
@@ -153,6 +166,7 @@ async function submitLogin() {
   loginSubmitting.value = true
   try {
     currentUser.value = await login({ ...loginForm })
+    setAuthToken(currentUser.value.token)
     saveSession(currentUser.value)
     loginForm.password = ''
     ElMessage.success(`欢迎回来，${currentUser.value.displayName}`)
@@ -173,6 +187,7 @@ async function logout() {
     .then(confirmed => {
       if (!confirmed) return
       currentUser.value = null
+      setAuthToken(null)
       saveSession(null)
       activeSection.value = 'overview'
     })

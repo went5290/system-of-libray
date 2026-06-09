@@ -6,10 +6,12 @@ import org.springframework.stereotype.Service;
 public class AuthService {
     private final AuthRepository authRepository;
     private final PasswordVerifier passwordVerifier;
+    private final TokenService tokenService;
 
-    public AuthService(AuthRepository authRepository, PasswordVerifier passwordVerifier) {
+    public AuthService(AuthRepository authRepository, PasswordVerifier passwordVerifier, TokenService tokenService) {
         this.authRepository = authRepository;
         this.passwordVerifier = passwordVerifier;
+        this.tokenService = tokenService;
     }
 
     public LoginResponse login(LoginRequest request) {
@@ -23,10 +25,13 @@ public class AuthService {
             throw new AuthFailedException("用户名或密码错误");
         }
 
+        AuthToken token = tokenService.issue(user.id());
         return new LoginResponse(
                 user.id(),
                 user.username(),
                 user.displayName(),
-                authRepository.findRoleCodes(user.id()));
+                authRepository.findRoleCodes(user.id()),
+                token.value(),
+                token.expiresAt());
     }
 }

@@ -6,13 +6,13 @@ import org.junit.jupiter.api.Test;
 
 class PasswordVerifierTests {
     private static final String HASH =
-            "pbkdf2$120000$TiIXn/ioj++UBH3u56TneQ==$zPy1D8mVrkpDEeEdSqvvvjFhrcpy7A5QxEgVWX8DR3U=";
+            "pbkdf2$120000$dGVzdC1zYWx0LTE2Ynl0ZQ==$YKpYm/G+kY4D34WenLXa/jn4AYoeeHybcwGY6GtjMaY=";
 
     private final PasswordVerifier passwordVerifier = new PasswordVerifier();
 
     @Test
     void verifiesMatchingPassword() {
-        assertThat(passwordVerifier.matches("Aa233613", HASH)).isTrue();
+        assertThat(passwordVerifier.matches("unit-test-password", HASH)).isTrue();
     }
 
     @Test
