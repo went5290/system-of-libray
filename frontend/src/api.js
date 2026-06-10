@@ -36,8 +36,23 @@ export async function login(credentials) {
   return response.data
 }
 
+export async function changePassword(passwords) {
+  const response = await client.put('/auth/password', passwords)
+  return response.data
+}
+
 export async function getOverview() {
   const response = await client.get('/overview')
+  return response.data
+}
+
+export async function getLibraryRules() {
+  const response = await client.get('/rules')
+  return response.data
+}
+
+export async function updateLibraryRules(rules) {
+  const response = await client.put('/rules', rules)
   return response.data
 }
 
@@ -48,6 +63,16 @@ export async function searchBooks(keyword = '') {
 
 export async function getBookCategories() {
   const response = await client.get('/books/categories')
+  return response.data
+}
+
+export async function createBookCategory(category) {
+  const response = await client.post('/books/categories', category)
+  return response.data
+}
+
+export async function updateBookCategory(categoryId, category) {
+  const response = await client.put(`/books/categories/${categoryId}`, category)
   return response.data
 }
 
@@ -66,6 +91,21 @@ export async function createBookCopy(bookId, copy) {
   return response.data
 }
 
+export async function getBookCopies(bookId) {
+  const response = await client.get(`/books/${bookId}/copies`)
+  return response.data
+}
+
+export async function updateBookCopyStatus(copyId, status) {
+  const response = await client.put(`/books/copies/${copyId}/status`, { status })
+  return response.data
+}
+
+export async function updateBookCopyLocation(copyId, shelfLocation) {
+  const response = await client.put(`/books/copies/${copyId}/location`, { shelfLocation })
+  return response.data
+}
+
 export async function searchReaders(keyword = '') {
   const response = await client.get('/readers', { params: { keyword } })
   return response.data
@@ -73,6 +113,11 @@ export async function searchReaders(keyword = '') {
 
 export async function createReader(reader) {
   const response = await client.post('/readers', reader)
+  return response.data
+}
+
+export async function updateReader(readerId, reader) {
+  const response = await client.put(`/readers/${readerId}`, reader)
   return response.data
 }
 

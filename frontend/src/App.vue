@@ -1,8 +1,9 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Collection, List, Plus, Reading, Search, Switch, User } from '@element-plus/icons-vue'
+import { Collection, Download, List, Plus, Reading, Search, Setting, Switch, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { borrowBook, createBook, createBookCopy, createReader, getBookCategories, getOverview, login, payFine, renewBorrow, returnBook, searchBooks, searchBorrowRecords, searchOperationLogs, searchReaders, setAuthToken, setUnauthorizedHandler, updateBook, updateReaderStatus } from './api'
+import { borrowBook, changePassword, createBook, createBookCategory, createBookCopy, createReader, getBookCategories, getBookCopies, getLibraryRules, getOverview, login, payFine, renewBorrow, returnBook, searchBooks, searchBorrowRecords, searchOperationLogs, searchReaders, setAuthToken, setUnauthorizedHandler, updateBook, updateBookCategory, updateBookCopyLocation, updateBookCopyStatus, updateLibraryRules, updateReader, updateReaderStatus } from './api'
+import { downloadCsv } from './csv'
 
 const SESSION_KEY = 'library-console-user'
 
@@ -39,6 +40,9 @@ setUnauthorizedHandler(() => {
 })
 const loginSubmitting = ref(false)
 const loginFormRef = ref()
+const passwordDialogVisible = ref(false)
+const passwordSubmitting = ref(false)
+const passwordFormRef = ref()
 const books = ref([])
 const categories = ref([])
 const keyword = ref('')
@@ -48,10 +52,22 @@ const dialogVisible = ref(false)
 const submitting = ref(false)
 const formRef = ref()
 const editingBook = ref(null)
+const categoryDialogVisible = ref(false)
+const categorySubmitting = ref(false)
+const categoryFormRef = ref()
+const editingCategory = ref(null)
 const copyDialogVisible = ref(false)
 const copySubmitting = ref(false)
 const copyFormRef = ref()
 const selectedBook = ref(null)
+const copyListDialogVisible = ref(false)
+const copyListLoading = ref(false)
+const copyStatusUpdating = ref(null)
+const bookCopies = ref([])
+const selectedCopyBook = ref(null)
+const copyLocationEditingId = ref(null)
+const copyLocationDraft = ref('')
+const copyLocationSubmitting = ref(false)
 const activeSection = ref('overview')
 const overview = ref(null)
 const overviewLoading = ref(false)
@@ -61,6 +77,7 @@ const readerLoading = ref(false)
 const readerDialogVisible = ref(false)
 const readerSubmitting = ref(false)
 const readerFormRef = ref()
+const editingReader = ref(null)
 const borrowSubmitting = ref(false)
 const borrowFormRef = ref()
 const lastBorrow = ref(null)
@@ -74,6 +91,9 @@ const borrowRecordLoading = ref(false)
 const operationLogs = ref([])
 const operationLogKeyword = ref('')
 const operationLogLoading = ref(false)
+const ruleLoading = ref(false)
+const ruleSubmitting = ref(false)
+const ruleFormRef = ref()
 const fineDialogVisible = ref(false)
 const fineSubmitting = ref(false)
 const selectedFineRecord = ref(null)
@@ -87,6 +107,21 @@ const loginForm = reactive({
 const loginRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+}
+
+const passwordForm = reactive({
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
+const passwordRules = {
+  currentPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 8, max: 72, message: '新密码长度必须为 8 至 72 个字符', trigger: 'blur' }
+  ],
+  confirmPassword: [{ required: true, message: '请再次输入新密码', trigger: 'blur' }]
 }
 
 const form = reactive({
@@ -103,6 +138,15 @@ const rules = {
   isbn: [{ required: true, message: '请输入 ISBN', trigger: 'blur' }],
   title: [{ required: true, message: '请输入书名', trigger: 'blur' }],
   categoryId: [{ required: true, message: '请选择图书分类', trigger: 'change' }]
+}
+
+const categoryForm = reactive({
+  categoryName: '',
+  description: ''
+})
+
+const categoryRules = {
+  categoryName: [{ required: true, message: '请输入分类名称', trigger: 'blur' }]
 }
 
 const copyForm = reactive({
@@ -153,6 +197,18 @@ const fineRules = {
   amount: [{ required: true, message: '请输入缴费金额', trigger: 'blur' }]
 }
 
+const ruleForm = reactive({
+  borrowDays: 30,
+  maxRenewCount: 1,
+  finePerDay: 0.5
+})
+
+const ruleRules = {
+  borrowDays: [{ required: true, message: '请输入默认借阅天数', trigger: 'blur' }],
+  maxRenewCount: [{ required: true, message: '请输入最大续借次数', trigger: 'blur' }],
+  finePerDay: [{ required: true, message: '请输入每日逾期费用', trigger: 'blur' }]
+}
+
 const totalCopies = computed(() => books.value.reduce((sum, book) => sum + book.totalCopies, 0))
 const availableCopies = computed(() => books.value.reduce((sum, book) => sum + book.availableCopies, 0))
 const activeReaders = computed(() => readers.value.filter(reader => reader.status === 'ACTIVE').length)
@@ -197,6 +253,36 @@ async function logout() {
     })
 }
 
+function resetPasswordForm() {
+  Object.assign(passwordForm, { currentPassword: '', newPassword: '', confirmPassword: '' })
+  passwordFormRef.value?.clearValidate()
+}
+
+async function submitPasswordChange() {
+  const valid = await passwordFormRef.value.validate().catch(() => false)
+  if (!valid) return
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    ElMessage.warning('两次输入的新密码不一致')
+    return
+  }
+
+  passwordSubmitting.value = true
+  try {
+    await changePassword({ ...passwordForm })
+    passwordDialogVisible.value = false
+    resetPasswordForm()
+    currentUser.value = null
+    setAuthToken(null)
+    saveSession(null)
+    activeSection.value = 'overview'
+    ElMessage.success('密码修改成功，请使用新密码重新登录')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '修改密码失败')
+  } finally {
+    passwordSubmitting.value = false
+  }
+}
+
 async function loadBooks() {
   loading.value = true
   errorMessage.value = ''
@@ -216,6 +302,52 @@ async function openCreateDialog() {
     dialogVisible.value = true
   } catch {
     ElMessage.error('无法加载图书分类')
+  }
+}
+
+async function openCategoryDialog() {
+  try {
+    categories.value = await getBookCategories()
+    categoryDialogVisible.value = true
+  } catch {
+    ElMessage.error('无法加载图书分类')
+  }
+}
+
+function editCategory(category) {
+  editingCategory.value = category
+  Object.assign(categoryForm, {
+    categoryName: category.categoryName,
+    description: category.description || ''
+  })
+}
+
+function resetCategoryForm() {
+  editingCategory.value = null
+  Object.assign(categoryForm, { categoryName: '', description: '' })
+  categoryFormRef.value?.clearValidate()
+}
+
+async function submitCategory() {
+  const valid = await categoryFormRef.value.validate().catch(() => false)
+  if (!valid) return
+
+  categorySubmitting.value = true
+  try {
+    if (editingCategory.value) {
+      await updateBookCategory(editingCategory.value.id, { ...categoryForm })
+      ElMessage.success('分类已更新')
+    } else {
+      await createBookCategory({ ...categoryForm })
+      ElMessage.success('分类已新增')
+    }
+    resetCategoryForm()
+    categories.value = await getBookCategories()
+    await loadBooks()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || (editingCategory.value ? '更新分类失败' : '新增分类失败'))
+  } finally {
+    categorySubmitting.value = false
   }
 }
 
@@ -282,6 +414,95 @@ function openCopyDialog(book) {
   copyDialogVisible.value = true
 }
 
+async function openCopyListDialog(book) {
+  selectedCopyBook.value = book
+  copyListDialogVisible.value = true
+  copyListLoading.value = true
+  try {
+    bookCopies.value = await getBookCopies(book.id)
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '加载馆藏副本失败')
+  } finally {
+    copyListLoading.value = false
+  }
+}
+
+function resetCopyList() {
+  selectedCopyBook.value = null
+  bookCopies.value = []
+  copyStatusUpdating.value = null
+  cancelCopyLocationEdit()
+}
+
+function startCopyLocationEdit(copy) {
+  copyLocationEditingId.value = copy.id
+  copyLocationDraft.value = copy.shelfLocation || ''
+}
+
+function cancelCopyLocationEdit() {
+  copyLocationEditingId.value = null
+  copyLocationDraft.value = ''
+}
+
+async function submitCopyLocation(copy) {
+  if (copyLocationDraft.value.length > 80) {
+    ElMessage.warning('书架位置不能超过 80 个字符')
+    return
+  }
+  copyLocationSubmitting.value = true
+  try {
+    await updateBookCopyLocation(copy.id, copyLocationDraft.value)
+    bookCopies.value = await getBookCopies(selectedCopyBook.value.id)
+    cancelCopyLocationEdit()
+    ElMessage.success('书架位置已更新')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '更新书架位置失败')
+  } finally {
+    copyLocationSubmitting.value = false
+  }
+}
+
+function copyStatusLabel(status) {
+  return {
+    AVAILABLE: '可借',
+    BORROWED: '借出',
+    LOST: '遗失',
+    DAMAGED: '损坏',
+    MAINTENANCE: '维护中'
+  }[status] || status
+}
+
+function copyStatusType(status) {
+  return {
+    AVAILABLE: 'success',
+    BORROWED: 'primary',
+    LOST: 'danger',
+    DAMAGED: 'warning',
+    MAINTENANCE: 'info'
+  }[status] || 'info'
+}
+
+async function changeCopyStatus(copy, status) {
+  if (status === copy.status) return
+  try {
+    await ElMessageBox.confirm(
+      `确认将馆藏副本 ${copy.barcode} 的状态修改为“${copyStatusLabel(status)}”？`,
+      '修改馆藏副本状态',
+      { confirmButtonText: '确认修改', cancelButtonText: '取消', type: 'warning' }
+    )
+    copyStatusUpdating.value = copy.id
+    await updateBookCopyStatus(copy.id, status)
+    bookCopies.value = await getBookCopies(selectedCopyBook.value.id)
+    await loadBooks()
+    ElMessage.success('馆藏副本状态已更新')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error.response?.data?.message || '更新馆藏副本状态失败')
+  } finally {
+    copyStatusUpdating.value = null
+  }
+}
+
 function resetCopyForm() {
   Object.assign(copyForm, { barcode: '', shelfLocation: '' })
   selectedBook.value = null
@@ -310,7 +531,8 @@ async function switchSection(section) {
   activeSection.value = section
   if (section === 'overview') await loadOverview()
   if (section === 'readers') await loadReaders()
-  if (section === 'records') await loadBorrowRecords()
+  if (section === 'records') await Promise.all([loadBorrowRecords(), loadLibraryRules()])
+  if (section === 'rules') await loadLibraryRules()
   if (section === 'logs') await loadOperationLogs()
 }
 
@@ -358,6 +580,36 @@ async function loadOperationLogs() {
   }
 }
 
+async function loadLibraryRules() {
+  ruleLoading.value = true
+  try {
+    Object.assign(ruleForm, await getLibraryRules())
+  } catch {
+    ElMessage.error('无法加载借阅规则')
+  } finally {
+    ruleLoading.value = false
+  }
+}
+
+async function submitLibraryRules() {
+  const valid = await ruleFormRef.value.validate().catch(() => false)
+  if (!valid) return
+
+  ruleSubmitting.value = true
+  try {
+    Object.assign(ruleForm, await updateLibraryRules({ ...ruleForm }))
+    ElMessage.success('借阅规则已保存，新办理业务将立即使用新规则')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '保存借阅规则失败')
+  } finally {
+    ruleSubmitting.value = false
+  }
+}
+
+function canRenew(record) {
+  return record.status === 'BORROWED' && record.renewCount < ruleForm.maxRenewCount
+}
+
 function borrowStatusType(status) {
   return { BORROWED: 'primary', OVERDUE: 'danger', RETURNED: 'success', LOST: 'warning' }[status] || 'info'
 }
@@ -366,13 +618,20 @@ function logActionLabel(action) {
   return {
     CREATE_BOOK: '新增书目',
     UPDATE_BOOK: '编辑书目',
+    CREATE_BOOK_CATEGORY: '新增图书分类',
+    UPDATE_BOOK_CATEGORY: '编辑图书分类',
     CREATE_BOOK_COPY: '登记副本',
+    UPDATE_BOOK_COPY_STATUS: '更新副本状态',
+    UPDATE_BOOK_COPY_LOCATION: '更新副本位置',
     CREATE_READER: '新增读者',
+    UPDATE_READER: '编辑读者',
     UPDATE_READER_STATUS: '更新读者状态',
     BORROW_BOOK: '办理借书',
     RETURN_BOOK: '办理归还',
     RENEW_BORROW: '办理续借',
-    PAY_FINE: '罚款缴费'
+    PAY_FINE: '罚款缴费',
+    UPDATE_LIBRARY_RULES: '更新借阅规则',
+    CHANGE_PASSWORD: '修改登录密码'
   }[action] || action
 }
 
@@ -427,8 +686,25 @@ async function submitFinePayment() {
 }
 
 function resetReaderForm() {
+  editingReader.value = null
   Object.assign(readerForm, { readerNo: '', phone: '', email: '', maxBorrowCount: 5 })
   readerFormRef.value?.clearValidate()
+}
+
+function openCreateReaderDialog() {
+  resetReaderForm()
+  readerDialogVisible.value = true
+}
+
+function openEditReaderDialog(reader) {
+  editingReader.value = reader
+  Object.assign(readerForm, {
+    readerNo: reader.readerNo,
+    phone: reader.phone || '',
+    email: reader.email || '',
+    maxBorrowCount: reader.maxBorrowCount
+  })
+  readerDialogVisible.value = true
 }
 
 async function submitReader() {
@@ -437,14 +713,19 @@ async function submitReader() {
 
   readerSubmitting.value = true
   try {
-    await createReader({ ...readerForm })
-    ElMessage.success('读者新增成功')
+    if (editingReader.value) {
+      await updateReader(editingReader.value.id, { ...readerForm })
+      ElMessage.success('读者资料已更新')
+    } else {
+      await createReader({ ...readerForm })
+      ElMessage.success('读者新增成功')
+    }
     readerDialogVisible.value = false
     resetReaderForm()
     readerKeyword.value = ''
     await loadReaders()
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || '新增读者失败')
+    ElMessage.error(error.response?.data?.message || (editingReader.value ? '更新读者资料失败' : '新增读者失败'))
   } finally {
     readerSubmitting.value = false
   }
@@ -513,6 +794,60 @@ function formatDateTime(value) {
   return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : ''
 }
 
+function exportDate() {
+  return new Date().toLocaleDateString('sv-SE')
+}
+
+function exportCurrentRows(filename, columns, rows) {
+  if (!rows.length) {
+    ElMessage.warning('当前没有可导出的数据')
+    return
+  }
+  downloadCsv(`${filename}-${exportDate()}.csv`, columns, rows)
+  ElMessage.success(`已导出 ${rows.length} 条数据`)
+}
+
+function exportBooks() {
+  exportCurrentRows('馆藏书目', [
+    { label: 'ISBN', value: row => row.isbn },
+    { label: '书名', value: row => row.title },
+    { label: '作者', value: row => row.author },
+    { label: '出版社', value: row => row.publisher },
+    { label: '出版日期', value: row => row.publishDate },
+    { label: '分类', value: row => row.categoryName },
+    { label: '馆藏数量', value: row => row.totalCopies },
+    { label: '可借数量', value: row => row.availableCopies },
+    { label: '简介', value: row => row.description }
+  ], books.value)
+}
+
+function exportReaders() {
+  exportCurrentRows('读者名单', [
+    { label: '借书证号', value: row => row.readerNo },
+    { label: '手机号', value: row => row.phone },
+    { label: '邮箱', value: row => row.email },
+    { label: '最大借阅数', value: row => row.maxBorrowCount },
+    { label: '状态', value: row => row.status },
+    { label: '创建时间', value: row => formatDateTime(row.createdAt) }
+  ], readers.value)
+}
+
+function exportBorrowRecords() {
+  exportCurrentRows('借阅记录', [
+    { label: '借书证号', value: row => row.readerNo },
+    { label: '书名', value: row => row.bookTitle },
+    { label: '馆藏条码', value: row => row.barcode },
+    { label: '借出时间', value: row => formatDateTime(row.borrowedAt) },
+    { label: '应还时间', value: row => formatDateTime(row.dueAt) },
+    { label: '归还时间', value: row => formatDateTime(row.returnedAt) },
+    { label: '续借次数', value: row => row.renewCount },
+    { label: '借阅状态', value: row => row.status },
+    { label: '罚款金额', value: row => Number(row.fineAmount || 0).toFixed(2) },
+    { label: '已缴金额', value: row => Number(row.paidAmount || 0).toFixed(2) },
+    { label: '罚款状态', value: row => row.fineStatus }
+  ], borrowRecords.value)
+}
+
 onMounted(async () => {
   if (!currentUser.value) return
   await Promise.all([loadOverview(), loadBooks()])
@@ -565,12 +900,16 @@ onMounted(async () => {
         <el-menu-item index="readers"><el-icon><User /></el-icon>读者管理</el-menu-item>
         <el-menu-item index="borrow"><el-icon><Switch /></el-icon>借阅办理</el-menu-item>
         <el-menu-item index="records"><el-icon><List /></el-icon>借阅记录</el-menu-item>
+        <el-menu-item index="rules"><el-icon><Setting /></el-icon>借阅规则</el-menu-item>
         <el-menu-item index="logs"><el-icon><List /></el-icon>操作日志</el-menu-item>
       </el-menu>
       <div class="sidebar-user">
         <el-avatar size="small">{{ currentUser.displayName?.slice(0, 1) }}</el-avatar>
         <div><strong>{{ currentUser.displayName }}</strong><span>{{ currentUser.roles?.[0] }}</span></div>
-        <el-button link @click="logout">退出</el-button>
+        <div class="sidebar-user-actions">
+          <el-button link @click="passwordDialogVisible = true">改密</el-button>
+          <el-button link @click="logout">退出</el-button>
+        </div>
       </div>
       <div class="oracle-badge">Oracle 12c · LJW4</div>
     </el-aside>
@@ -653,6 +992,8 @@ onMounted(async () => {
             <el-input v-model="keyword" clearable placeholder="书名、作者或 ISBN" @keyup.enter="loadBooks">
               <template #append><el-button :icon="Search" @click="loadBooks" /></template>
             </el-input>
+            <el-button :icon="Download" @click="exportBooks">导出当前结果</el-button>
+            <el-button @click="openCategoryDialog">分类管理</el-button>
             <el-button type="primary" :icon="Plus" @click="openCreateDialog">新增书目</el-button>
           </div>
         </div>
@@ -668,10 +1009,11 @@ onMounted(async () => {
               <strong class="availability">{{ row.availableCopies }}</strong> / {{ row.totalCopies }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right">
+          <el-table-column label="操作" width="190" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
               <el-button link type="primary" @click="openCopyDialog(row)">登记副本</el-button>
+              <el-button link type="primary" @click="openCopyListDialog(row)">副本明细</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -704,7 +1046,8 @@ onMounted(async () => {
             <el-input v-model="readerKeyword" clearable placeholder="借书证号、手机号或邮箱" @keyup.enter="loadReaders">
               <template #append><el-button :icon="Search" @click="loadReaders" /></template>
             </el-input>
-            <el-button type="primary" :icon="Plus" @click="readerDialogVisible = true">新增读者</el-button>
+            <el-button :icon="Download" @click="exportReaders">导出当前结果</el-button>
+            <el-button type="primary" :icon="Plus" @click="openCreateReaderDialog">新增读者</el-button>
           </div>
         </div>
 
@@ -718,8 +1061,9 @@ onMounted(async () => {
               <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'warning'">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right">
+          <el-table-column label="操作" width="190" fixed="right">
             <template #default="{ row }">
+              <el-button link type="primary" @click="openEditReaderDialog(row)">编辑资料</el-button>
               <el-dropdown trigger="click" @command="changeReaderStatus(row, $event)">
                 <el-button link type="primary">修改状态</el-button>
                 <template #dropdown>
@@ -845,6 +1189,7 @@ onMounted(async () => {
             <el-input v-model="borrowRecordKeyword" clearable placeholder="借书证号、馆藏条码或书名" @keyup.enter="loadBorrowRecords">
               <template #append><el-button :icon="Search" @click="loadBorrowRecords" /></template>
             </el-input>
+            <el-button :icon="Download" @click="exportBorrowRecords">导出当前结果</el-button>
           </div>
         </div>
 
@@ -873,16 +1218,59 @@ onMounted(async () => {
           </el-table-column>
           <el-table-column label="操作" width="145" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="row.status === 'BORROWED' && row.renewCount < 1" link type="primary" @click="renewRecord(row)">
+              <el-button v-if="canRenew(row)" link type="primary" @click="renewRecord(row)">
                 续借
               </el-button>
               <el-button v-if="['UNPAID', 'PARTIAL'].includes(row.fineStatus)" link type="danger" @click="openFineDialog(row)">
                 缴费
               </el-button>
-              <span v-if="!(row.status === 'BORROWED' && row.renewCount < 1) && !['UNPAID', 'PARTIAL'].includes(row.fineStatus)" class="muted-action">—</span>
+              <span v-if="!canRenew(row) && !['UNPAID', 'PARTIAL'].includes(row.fineStatus)" class="muted-action">—</span>
             </template>
           </el-table-column>
         </el-table>
+      </section>
+    </el-main>
+
+    <el-main v-else-if="activeSection === 'rules'" class="main">
+      <header>
+        <div>
+          <p class="eyebrow">Library Rules</p>
+          <h1>让借阅规则清晰且可控。</h1>
+          <p class="subtitle">规则保存后，新办理的借书、续借和逾期罚款会立即使用最新设置。</p>
+        </div>
+        <el-avatar size="large">规</el-avatar>
+      </header>
+
+      <section class="stats">
+        <article><span>默认借阅周期</span><strong>{{ ruleForm.borrowDays }}</strong><small>天</small></article>
+        <article><span>最大续借次数</span><strong>{{ ruleForm.maxRenewCount }}</strong><small>次</small></article>
+        <article class="highlight"><span>每日逾期费用</span><strong>¥{{ Number(ruleForm.finePerDay).toFixed(2) }}</strong><small>每册每天</small></article>
+      </section>
+
+      <section class="catalog rule-panel" v-loading="ruleLoading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Settings</p>
+            <h2>借阅规则设置</h2>
+          </div>
+        </div>
+        <el-form ref="ruleFormRef" :model="ruleForm" :rules="ruleRules" label-width="150px">
+          <el-form-item label="默认借阅天数" prop="borrowDays">
+            <el-input-number v-model="ruleForm.borrowDays" :min="1" :max="365" />
+            <span class="rule-help">办理借书和续借时增加的天数，范围 1 至 365 天。</span>
+          </el-form-item>
+          <el-form-item label="最大续借次数" prop="maxRenewCount">
+            <el-input-number v-model="ruleForm.maxRenewCount" :min="0" :max="20" />
+            <span class="rule-help">设置为 0 表示不允许续借。</span>
+          </el-form-item>
+          <el-form-item label="每日逾期费用" prop="finePerDay">
+            <el-input-number v-model="ruleForm.finePerDay" :min="0" :max="999.99" :precision="2" :step="0.5" />
+            <span class="rule-help">归还时按逾期天数计算，可设置为 0。</span>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="ruleSubmitting" @click="submitLibraryRules">保存借阅规则</el-button>
+          </el-form-item>
+        </el-form>
       </section>
     </el-main>
 
@@ -934,6 +1322,24 @@ onMounted(async () => {
     </el-main>
   </el-container>
 
+  <el-dialog v-model="passwordDialogVisible" title="修改登录密码" width="460px" @closed="resetPasswordForm">
+    <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="100px">
+      <el-form-item label="当前密码" prop="currentPassword">
+        <el-input v-model="passwordForm.currentPassword" type="password" show-password autocomplete="current-password" />
+      </el-form-item>
+      <el-form-item label="新密码" prop="newPassword">
+        <el-input v-model="passwordForm.newPassword" type="password" show-password autocomplete="new-password" />
+      </el-form-item>
+      <el-form-item label="确认新密码" prop="confirmPassword">
+        <el-input v-model="passwordForm.confirmPassword" type="password" show-password autocomplete="new-password" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="passwordDialogVisible = false">取消</el-button>
+      <el-button type="primary" :loading="passwordSubmitting" @click="submitPasswordChange">确认修改</el-button>
+    </template>
+  </el-dialog>
+
   <el-dialog v-model="dialogVisible" :title="editingBook ? '编辑书目' : '新增书目'" width="560px" @closed="resetForm">
     <el-form ref="formRef" :model="form" :rules="rules" label-width="88px">
       <el-form-item label="ISBN" prop="isbn"><el-input v-model="form.isbn" maxlength="20" /></el-form-item>
@@ -956,6 +1362,34 @@ onMounted(async () => {
     </template>
   </el-dialog>
 
+  <el-dialog v-model="categoryDialogVisible" title="图书分类管理" width="680px" @closed="resetCategoryForm">
+    <el-form ref="categoryFormRef" :model="categoryForm" :rules="categoryRules" label-width="88px">
+      <el-form-item label="分类名称" prop="categoryName">
+        <el-input v-model="categoryForm.categoryName" maxlength="80" placeholder="例如 科学" />
+      </el-form-item>
+      <el-form-item label="分类描述">
+        <el-input v-model="categoryForm.description" type="textarea" :rows="2" maxlength="500" placeholder="可选" />
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" :loading="categorySubmitting" @click="submitCategory">
+          {{ editingCategory ? '保存分类修改' : '新增分类' }}
+        </el-button>
+        <el-button v-if="editingCategory" @click="resetCategoryForm">取消编辑</el-button>
+      </el-form-item>
+    </el-form>
+    <el-table :data="categories" stripe empty-text="暂无分类">
+      <el-table-column prop="categoryName" label="分类名称" width="150" />
+      <el-table-column prop="description" label="描述" min-width="300">
+        <template #default="{ row }">{{ row.description || '暂无描述' }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="90">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="editCategory(row)">编辑</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+  </el-dialog>
+
   <el-dialog v-model="copyDialogVisible" title="登记馆藏副本" width="460px" @closed="resetCopyForm">
     <p class="dialog-context">书目：<strong>{{ selectedBook?.title }}</strong></p>
     <el-form ref="copyFormRef" :model="copyForm" :rules="copyRules" label-width="88px">
@@ -972,7 +1406,56 @@ onMounted(async () => {
     </template>
   </el-dialog>
 
-  <el-dialog v-model="readerDialogVisible" title="新增读者" width="500px" @closed="resetReaderForm">
+  <el-dialog v-model="copyListDialogVisible" title="馆藏副本明细" width="760px" @closed="resetCopyList">
+    <p class="dialog-context">书目：<strong>{{ selectedCopyBook?.title }}</strong></p>
+    <el-table v-loading="copyListLoading" :data="bookCopies" stripe empty-text="暂无馆藏副本">
+      <el-table-column prop="barcode" label="馆藏条码" min-width="150" />
+      <el-table-column prop="shelfLocation" label="书架位置" min-width="130">
+        <template #default="{ row }">
+          <el-input
+            v-if="copyLocationEditingId === row.id"
+            v-model="copyLocationDraft"
+            maxlength="80"
+            size="small"
+            placeholder="未设置"
+            @keyup.enter="submitCopyLocation(row)"
+          />
+          <span v-else>{{ row.shelfLocation || '未设置' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="acquiredAt" label="入馆日期" width="120" />
+      <el-table-column prop="status" label="状态" width="100">
+        <template #default="{ row }">
+          <el-tag :type="copyStatusType(row.status)">{{ copyStatusLabel(row.status) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="220">
+        <template #default="{ row }">
+          <template v-if="copyLocationEditingId === row.id">
+            <el-button link type="primary" :loading="copyLocationSubmitting" @click="submitCopyLocation(row)">保存</el-button>
+            <el-button link @click="cancelCopyLocationEdit">取消</el-button>
+          </template>
+          <template v-else>
+            <el-button link type="primary" @click="startCopyLocationEdit(row)">编辑位置</el-button>
+            <span v-if="row.status === 'BORROWED'" class="muted-action">请先归还</span>
+            <el-dropdown v-else trigger="click" :disabled="copyStatusUpdating === row.id" @command="changeCopyStatus(row, $event)">
+              <el-button link type="primary" :loading="copyStatusUpdating === row.id">修改状态</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="AVAILABLE" :disabled="row.status === 'AVAILABLE'">设为可借</el-dropdown-item>
+                  <el-dropdown-item command="MAINTENANCE" :disabled="row.status === 'MAINTENANCE'">设为维护中</el-dropdown-item>
+                  <el-dropdown-item command="DAMAGED" :disabled="row.status === 'DAMAGED'">设为损坏</el-dropdown-item>
+                  <el-dropdown-item command="LOST" :disabled="row.status === 'LOST'">设为遗失</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </template>
+        </template>
+      </el-table-column>
+    </el-table>
+  </el-dialog>
+
+  <el-dialog v-model="readerDialogVisible" :title="editingReader ? '编辑读者资料' : '新增读者'" width="500px" @closed="resetReaderForm">
     <el-form ref="readerFormRef" :model="readerForm" :rules="readerRules" label-width="100px">
       <el-form-item label="借书证号" prop="readerNo">
         <el-input v-model="readerForm.readerNo" maxlength="30" placeholder="例如 R-2026-0001" />
@@ -989,7 +1472,7 @@ onMounted(async () => {
     </el-form>
     <template #footer>
       <el-button @click="readerDialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="readerSubmitting" @click="submitReader">确认新增</el-button>
+      <el-button type="primary" :loading="readerSubmitting" @click="submitReader">{{ editingReader ? '保存修改' : '确认新增' }}</el-button>
     </template>
   </el-dialog>
 

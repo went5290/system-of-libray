@@ -53,6 +53,8 @@ body { margin: 0; min-width: 1100px; }
 .sidebar-user strong { color: #f4f3e9; font-size: 12px; }
 .sidebar-user span { margin-top: 3px; color: #91aaa2; font-size: 9px; }
 .sidebar-user .el-button { color: #b9cac4; font-size: 11px; }
+.sidebar-user-actions { display: flex; gap: 2px; }
+.sidebar-user-actions .el-button + .el-button { margin-left: 0; }
 .oracle-badge { position: absolute; bottom: 28px; left: 28px; color: #91aaa2; font-size: 11px; letter-spacing: 1px; }
 
 .main { padding: 40px 48px 56px; background: linear-gradient(145deg, #f4f7f5 0%, #e9efec 100%); }
@@ -116,5 +118,8 @@ h2 { font-size: 26px; }
 .fine-summary { display: flex; justify-content: space-between; gap: 12px; margin: 0 0 24px; color: #75867f; font-size: 13px; }
 .fine-summary strong { color: #c86152; }
 .muted-action { color: #aebbb6; }
+.rule-panel { max-width: 820px; }
+.rule-panel .el-input-number { width: 180px; }
+.rule-help { margin-left: 16px; color: #84958f; font-size: 12px; }
 .availability { color: #168164; }
 .el-alert { margin-bottom: 18px; }
