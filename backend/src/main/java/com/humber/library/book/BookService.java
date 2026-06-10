@@ -1,14 +1,17 @@
 package com.humber.library.book;
 
+import com.humber.library.operationlog.OperationLogService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class BookService {
     private final BookRepository bookRepository;
+    private final OperationLogService operationLogService;
 
-    public BookService(BookRepository bookRepository) {
+    public BookService(BookRepository bookRepository, OperationLogService operationLogService) {
         this.bookRepository = bookRepository;
+        this.operationLogService = operationLogService;
     }
 
     @Transactional
@@ -25,6 +28,7 @@ public class BookService {
 
         long id = bookRepository.nextId();
         bookRepository.insert(id, request, isbn, title);
+        operationLogService.record("CREATE_BOOK", "BOOK", id, "新增书目：" + title + "，ISBN：" + isbn);
         return new BookCreateResponse(id, isbn, title);
     }
 
@@ -41,6 +45,7 @@ public class BookService {
 
         long id = bookRepository.nextCopyId();
         bookRepository.insertCopy(id, bookId, barcode, request.shelfLocation());
+        operationLogService.record("CREATE_BOOK_COPY", "BOOK_COPY", id, "登记馆藏副本：" + barcode);
         return new BookCopyCreateResponse(id, bookId, barcode, "AVAILABLE");
     }
 }

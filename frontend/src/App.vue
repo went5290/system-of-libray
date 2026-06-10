@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Collection, List, Plus, Reading, Search, Switch, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { borrowBook, createBook, createBookCopy, createReader, getBookCategories, getOverview, login, payFine, renewBorrow, returnBook, searchBooks, searchBorrowRecords, searchReaders, setAuthToken, setUnauthorizedHandler, updateReaderStatus } from './api'
+import { borrowBook, createBook, createBookCopy, createReader, getBookCategories, getOverview, login, payFine, renewBorrow, returnBook, searchBooks, searchBorrowRecords, searchOperationLogs, searchReaders, setAuthToken, setUnauthorizedHandler, updateReaderStatus } from './api'
 
 const SESSION_KEY = 'library-console-user'
 
@@ -70,6 +70,9 @@ const lastReturn = ref(null)
 const borrowRecords = ref([])
 const borrowRecordKeyword = ref('')
 const borrowRecordLoading = ref(false)
+const operationLogs = ref([])
+const operationLogKeyword = ref('')
+const operationLogLoading = ref(false)
 const fineDialogVisible = ref(false)
 const fineSubmitting = ref(false)
 const selectedFineRecord = ref(null)
@@ -280,6 +283,7 @@ async function switchSection(section) {
   if (section === 'overview') await loadOverview()
   if (section === 'readers') await loadReaders()
   if (section === 'records') await loadBorrowRecords()
+  if (section === 'logs') await loadOperationLogs()
 }
 
 async function loadOverview() {
@@ -315,8 +319,32 @@ async function loadBorrowRecords() {
   }
 }
 
+async function loadOperationLogs() {
+  operationLogLoading.value = true
+  try {
+    operationLogs.value = await searchOperationLogs(operationLogKeyword.value)
+  } catch {
+    ElMessage.error('无法加载操作日志')
+  } finally {
+    operationLogLoading.value = false
+  }
+}
+
 function borrowStatusType(status) {
   return { BORROWED: 'primary', OVERDUE: 'danger', RETURNED: 'success', LOST: 'warning' }[status] || 'info'
+}
+
+function logActionLabel(action) {
+  return {
+    CREATE_BOOK: '新增书目',
+    CREATE_BOOK_COPY: '登记副本',
+    CREATE_READER: '新增读者',
+    UPDATE_READER_STATUS: '更新读者状态',
+    BORROW_BOOK: '办理借书',
+    RETURN_BOOK: '办理归还',
+    RENEW_BORROW: '办理续借',
+    PAY_FINE: '罚款缴费'
+  }[action] || action
 }
 
 async function renewRecord(record) {
@@ -508,6 +536,7 @@ onMounted(async () => {
         <el-menu-item index="readers"><el-icon><User /></el-icon>读者管理</el-menu-item>
         <el-menu-item index="borrow"><el-icon><Switch /></el-icon>借阅办理</el-menu-item>
         <el-menu-item index="records"><el-icon><List /></el-icon>借阅记录</el-menu-item>
+        <el-menu-item index="logs"><el-icon><List /></el-icon>操作日志</el-menu-item>
       </el-menu>
       <div class="sidebar-user">
         <el-avatar size="small">{{ currentUser.displayName?.slice(0, 1) }}</el-avatar>
@@ -760,7 +789,7 @@ onMounted(async () => {
       </section>
     </el-main>
 
-    <el-main v-else class="main">
+    <el-main v-else-if="activeSection === 'records'" class="main">
       <header>
         <div>
           <p class="eyebrow">借阅档案中心</p>
@@ -823,6 +852,53 @@ onMounted(async () => {
               <span v-if="!(row.status === 'BORROWED' && row.renewCount < 1) && !['UNPAID', 'PARTIAL'].includes(row.fineStatus)" class="muted-action">—</span>
             </template>
           </el-table-column>
+        </el-table>
+      </section>
+    </el-main>
+
+    <el-main v-else class="main">
+      <header>
+        <div>
+          <p class="eyebrow">Audit Trail</p>
+          <h1>每一次关键操作，都有迹可循。</h1>
+          <p class="subtitle">查看管理员对书目、读者、借阅和罚款产生的操作记录。</p>
+        </div>
+        <el-avatar size="large">志</el-avatar>
+      </header>
+
+      <section class="stats">
+        <article><span>日志数量</span><strong>{{ operationLogs.length }}</strong><small>最近 200 条内筛选</small></article>
+        <article><span>当前用户</span><strong>{{ currentUser.username }}</strong><small>{{ currentUser.roles?.[0] }}</small></article>
+        <article class="highlight"><span>审计范围</span><strong>8</strong><small>关键业务动作</small></article>
+      </section>
+
+      <section class="catalog">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Operation Logs</p>
+            <h2>操作日志</h2>
+          </div>
+          <div class="catalog-actions">
+            <el-input v-model="operationLogKeyword" clearable placeholder="动作、目标、详情或操作人" @keyup.enter="loadOperationLogs">
+              <template #append><el-button :icon="Search" @click="loadOperationLogs" /></template>
+            </el-input>
+          </div>
+        </div>
+
+        <el-table v-loading="operationLogLoading" :data="operationLogs" stripe empty-text="暂无操作日志">
+          <el-table-column label="时间" min-width="170">
+            <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="135">
+            <template #default="{ row }">
+              <el-tag>{{ logActionLabel(row.action) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="displayName" label="操作人" width="130" />
+          <el-table-column prop="targetType" label="目标类型" width="135" />
+          <el-table-column prop="targetId" label="目标编号" width="100" />
+          <el-table-column prop="detail" label="详情" min-width="300" />
+          <el-table-column prop="ipAddress" label="IP 地址" width="130" />
         </el-table>
       </section>
     </el-main>

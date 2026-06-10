@@ -1,5 +1,6 @@
 package com.humber.library.fine;
 
+import com.humber.library.operationlog.OperationLogService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
@@ -9,9 +10,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class FineService {
     private final FineRepository fineRepository;
+    private final OperationLogService operationLogService;
 
-    public FineService(FineRepository fineRepository) {
+    public FineService(FineRepository fineRepository, OperationLogService operationLogService) {
         this.fineRepository = fineRepository;
+        this.operationLogService = operationLogService;
     }
 
     @Transactional
@@ -36,6 +39,11 @@ public class FineService {
         LocalDateTime paidAt = paidInFull ? LocalDateTime.now() : null;
 
         fineRepository.updatePayment(fine.id(), paidAmount, status, paidAt);
+        operationLogService.record(
+                "PAY_FINE",
+                "FINE_RECORD",
+                fine.id(),
+                "缴纳罚款 " + payment + "，剩余 " + remainingAmount);
         return new FinePaymentResponse(
                 fine.id(),
                 fine.borrowRecordId(),
@@ -46,4 +54,3 @@ public class FineService {
                 paidAt);
     }
 }
-

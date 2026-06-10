@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.OptionalLong;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,25 +27,33 @@ public class TokenService {
     }
 
     public boolean isValid(String token) {
+        return userId(token).isPresent();
+    }
+
+    public OptionalLong userId(String token) {
         try {
             String[] parts = token.split("\\.");
             if (parts.length != 2) {
-                return false;
+                return OptionalLong.empty();
             }
 
             String payload = new String(decode(parts[0]), StandardCharsets.UTF_8);
             byte[] expectedSignature = sign(payload);
             byte[] actualSignature = decode(parts[1]);
             if (!MessageDigest.isEqual(expectedSignature, actualSignature)) {
-                return false;
+                return OptionalLong.empty();
             }
 
             String[] payloadParts = payload.split(":");
-            return payloadParts.length == 2
-                    && Long.parseLong(payloadParts[0]) > 0
+            if (payloadParts.length != 2) {
+                return OptionalLong.empty();
+            }
+            long userId = Long.parseLong(payloadParts[0]);
+            boolean valid = userId > 0
                     && Instant.ofEpochSecond(Long.parseLong(payloadParts[1])).isAfter(Instant.now());
+            return valid ? OptionalLong.of(userId) : OptionalLong.empty();
         } catch (IllegalArgumentException exception) {
-            return false;
+            return OptionalLong.empty();
         }
     }
 

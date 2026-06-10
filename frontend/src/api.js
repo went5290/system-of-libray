@@ -91,6 +91,11 @@ export async function searchBorrowRecords(keyword = '') {
   return response.data
 }
 
+export async function searchOperationLogs(keyword = '') {
+  const response = await client.get('/operation-logs', { params: { keyword } })
+  return response.data
+}
+
 export async function renewBorrow(borrowId) {
   const response = await client.post(`/borrows/${borrowId}/renew`)
   return response.data

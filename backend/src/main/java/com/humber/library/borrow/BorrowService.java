@@ -1,5 +1,6 @@
 package com.humber.library.borrow;
 
+import com.humber.library.operationlog.OperationLogService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
@@ -10,9 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class BorrowService {
     private final BorrowRepository borrowRepository;
+    private final OperationLogService operationLogService;
 
-    public BorrowService(BorrowRepository borrowRepository) {
+    public BorrowService(BorrowRepository borrowRepository, OperationLogService operationLogService) {
         this.borrowRepository = borrowRepository;
+        this.operationLogService = operationLogService;
     }
 
     @Transactional
@@ -40,6 +43,11 @@ public class BorrowService {
         long id = borrowRepository.nextId();
         borrowRepository.insert(id, reader.id(), copy.id(), borrowedAt, dueAt);
         borrowRepository.markCopyBorrowed(copy.id());
+        operationLogService.record(
+                "BORROW_BOOK",
+                "BORROW_RECORD",
+                id,
+                "读者 " + reader.readerNo() + " 借出 " + copy.barcode() + "（" + copy.bookTitle() + "）");
 
         return new BorrowCreateResponse(
                 id, reader.readerNo(), copy.barcode(), copy.bookTitle(), borrowedAt, dueAt, "BORROWED");
@@ -63,6 +71,11 @@ public class BorrowService {
         if (fineAmount.signum() > 0) {
             borrowRepository.insertFine(borrowRepository.nextFineId(), borrow.id(), fineAmount);
         }
+        operationLogService.record(
+                "RETURN_BOOK",
+                "BORROW_RECORD",
+                borrow.id(),
+                "归还 " + borrow.barcode() + "（" + borrow.bookTitle() + "），逾期 " + overdueDays + " 天");
 
         return new ReturnBookResponse(
                 borrow.id(),
@@ -93,6 +106,11 @@ public class BorrowService {
         LocalDateTime newDueAt = borrow.dueAt().plusDays(borrowRepository.borrowDays());
         int newRenewCount = borrow.renewCount() + 1;
         borrowRepository.renew(borrow.id(), newDueAt, newRenewCount);
+        operationLogService.record(
+                "RENEW_BORROW",
+                "BORROW_RECORD",
+                borrow.id(),
+                "续借 " + borrow.barcode() + "（" + borrow.bookTitle() + "）");
 
         return new BorrowRenewResponse(
                 borrow.id(),

@@ -31,7 +31,9 @@ public class AuthInterceptor implements HandlerInterceptor {
         String token = authorization != null && authorization.startsWith("Bearer ")
                 ? authorization.substring(7)
                 : "";
-        if (tokenService.isValid(token)) {
+        var userId = tokenService.userId(token);
+        if (userId.isPresent()) {
+            request.setAttribute("authenticatedUserId", userId.getAsLong());
             return true;
         }
 
