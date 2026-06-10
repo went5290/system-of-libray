@@ -29,6 +29,34 @@ public class AuthRepository {
                 .optional();
     }
 
+    public Optional<AuthUser> findById(long userId) {
+        return jdbcClient.sql("""
+                select id, username, password_hash, display_name, enabled
+                  from sys_user
+                 where id = :userId
+                """)
+                .param("userId", userId)
+                .query((rs, rowNum) -> new AuthUser(
+                        rs.getLong("id"),
+                        rs.getString("username"),
+                        rs.getString("password_hash"),
+                        rs.getString("display_name"),
+                        rs.getInt("enabled") == 1))
+                .optional();
+    }
+
+    public void updatePassword(long userId, String passwordHash) {
+        jdbcClient.sql("""
+                update sys_user
+                   set password_hash = :passwordHash,
+                       updated_at = current_timestamp
+                 where id = :userId
+                """)
+                .param("passwordHash", passwordHash)
+                .param("userId", userId)
+                .update();
+    }
+
     public List<String> findRoleCodes(long userId) {
         return jdbcClient.sql("""
                 select r.role_code
