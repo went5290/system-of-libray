@@ -42,6 +42,19 @@ public class ReaderRepository {
                 .single() > 0;
     }
 
+    public boolean readerNoExistsForOtherReader(String readerNo, long readerId) {
+        return jdbcClient.sql("""
+                select count(*)
+                  from reader
+                 where reader_no = :readerNo
+                   and id <> :readerId
+                """)
+                .param("readerNo", readerNo)
+                .param("readerId", readerId)
+                .query(Integer.class)
+                .single() > 0;
+    }
+
     public Optional<ReaderSummary> lockById(long id) {
         return jdbcClient.sql("""
                 select id, reader_no, phone, email, max_borrow_count, status, created_at
@@ -95,6 +108,23 @@ public class ReaderRepository {
     public void updateStatus(long id, String status) {
         jdbcClient.sql("update reader set status = :status where id = :id")
                 .param("status", status)
+                .param("id", id)
+                .update();
+    }
+
+    public void update(long id, String readerNo, ReaderCreateRequest request, int maxBorrowCount) {
+        jdbcClient.sql("""
+                update reader
+                   set reader_no = :readerNo,
+                       phone = :phone,
+                       email = :email,
+                       max_borrow_count = :maxBorrowCount
+                 where id = :id
+                """)
+                .param("readerNo", readerNo)
+                .param("phone", trimToNull(request.phone()))
+                .param("email", trimToNull(request.email()))
+                .param("maxBorrowCount", maxBorrowCount)
                 .param("id", id)
                 .update();
     }

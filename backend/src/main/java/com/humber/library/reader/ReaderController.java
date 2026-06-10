@@ -35,6 +35,13 @@ public class ReaderController {
         return readerService.create(request);
     }
 
+    @PutMapping("/{readerId}")
+    public ReaderSummary update(
+            @PathVariable long readerId,
+            @Valid @RequestBody ReaderCreateRequest request) {
+        return readerService.update(readerId, request);
+    }
+
     @PutMapping("/{readerId}/status")
     public ReaderSummary updateStatus(
             @PathVariable long readerId,
