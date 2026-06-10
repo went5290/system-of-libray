@@ -34,6 +34,27 @@ public class BookController {
         return bookRepository.findCategories();
     }
 
+    @PostMapping("/categories")
+    @ResponseStatus(HttpStatus.CREATED)
+    public BookCategorySummary createCategory(@Valid @RequestBody BookCategoryRequest request) {
+        return bookService.createCategory(request);
+    }
+
+    @PutMapping("/categories/{categoryId}")
+    public BookCategorySummary updateCategory(
+            @PathVariable long categoryId,
+            @Valid @RequestBody BookCategoryRequest request) {
+        return bookService.updateCategory(categoryId, request);
+    }
+
+    @GetMapping("/{bookId}/copies")
+    public List<BookCopySummary> copies(@PathVariable long bookId) {
+        if (!bookRepository.bookExists(bookId)) {
+            throw new IllegalArgumentException("书目不存在");
+        }
+        return bookRepository.findCopies(bookId);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public BookCreateResponse create(@Valid @RequestBody BookCreateRequest request) {
@@ -51,5 +72,19 @@ public class BookController {
     @PutMapping("/{bookId}")
     public BookUpdateResponse update(@PathVariable long bookId, @Valid @RequestBody BookCreateRequest request) {
         return bookService.update(bookId, request);
+    }
+
+    @PutMapping("/copies/{copyId}/status")
+    public BookCopySummary updateCopyStatus(
+            @PathVariable long copyId,
+            @Valid @RequestBody BookCopyStatusUpdateRequest request) {
+        return bookService.updateCopyStatus(copyId, request);
+    }
+
+    @PutMapping("/copies/{copyId}/location")
+    public BookCopySummary updateCopyLocation(
+            @PathVariable long copyId,
+            @Valid @RequestBody BookCopyLocationUpdateRequest request) {
+        return bookService.updateCopyLocation(copyId, request);
     }
 }

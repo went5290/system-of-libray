@@ -1,6 +1,7 @@
 package com.humber.library.book;
 
 import java.util.List;
+import java.util.Optional;
 import java.sql.Date;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -47,11 +48,98 @@ public class BookRepository {
     }
 
     public List<BookCategorySummary> findCategories() {
-        return jdbcClient.sql("select id, category_name from book_category order by category_name")
+        return jdbcClient.sql("select id, category_name, description from book_category order by category_name")
                 .query((rs, rowNum) -> new BookCategorySummary(
                         rs.getLong("id"),
-                        rs.getString("category_name")))
+                        rs.getString("category_name"),
+                        rs.getString("description")))
                 .list();
+    }
+
+    public boolean categoryNameExists(String categoryName) {
+        return jdbcClient.sql("select count(*) from book_category where category_name = :categoryName")
+                .param("categoryName", categoryName)
+                .query(Integer.class)
+                .single() > 0;
+    }
+
+    public boolean categoryNameExistsForOtherCategory(String categoryName, long categoryId) {
+        return jdbcClient.sql("""
+                select count(*)
+                  from book_category
+                 where category_name = :categoryName
+                   and id <> :categoryId
+                """)
+                .param("categoryName", categoryName)
+                .param("categoryId", categoryId)
+                .query(Integer.class)
+                .single() > 0;
+    }
+
+    public long nextCategoryId() {
+        return jdbcClient.sql("select seq_book_category.nextval from dual")
+                .query(Long.class)
+                .single();
+    }
+
+    public void insertCategory(long id, String categoryName, String description) {
+        jdbcClient.sql("""
+                insert into book_category (id, category_name, description)
+                values (:id, :categoryName, :description)
+                """)
+                .param("id", id)
+                .param("categoryName", categoryName)
+                .param("description", trimToNull(description))
+                .update();
+    }
+
+    public void updateCategory(long id, String categoryName, String description) {
+        jdbcClient.sql("""
+                update book_category
+                   set category_name = :categoryName,
+                       description = :description
+                 where id = :id
+                """)
+                .param("categoryName", categoryName)
+                .param("description", trimToNull(description))
+                .param("id", id)
+                .update();
+    }
+
+    public List<BookCopySummary> findCopies(long bookId) {
+        return jdbcClient.sql("""
+                select id, book_id, barcode, shelf_location, status, acquired_at
+                  from book_copy
+                 where book_id = :bookId
+                 order by barcode
+                """)
+                .param("bookId", bookId)
+                .query((rs, rowNum) -> new BookCopySummary(
+                        rs.getLong("id"),
+                        rs.getLong("book_id"),
+                        rs.getString("barcode"),
+                        rs.getString("shelf_location"),
+                        rs.getString("status"),
+                        rs.getDate("acquired_at").toLocalDate()))
+                .list();
+    }
+
+    public Optional<BookCopySummary> lockCopyById(long copyId) {
+        return jdbcClient.sql("""
+                select id, book_id, barcode, shelf_location, status, acquired_at
+                  from book_copy
+                 where id = :copyId
+                   for update
+                """)
+                .param("copyId", copyId)
+                .query((rs, rowNum) -> new BookCopySummary(
+                        rs.getLong("id"),
+                        rs.getLong("book_id"),
+                        rs.getString("barcode"),
+                        rs.getString("shelf_location"),
+                        rs.getString("status"),
+                        rs.getDate("acquired_at").toLocalDate()))
+                .optional();
     }
 
     public boolean categoryExists(long categoryId) {
@@ -151,6 +239,20 @@ public class BookRepository {
                 .param("publishDate", request.publishDate() == null ? null : Date.valueOf(request.publishDate()))
                 .param("categoryId", request.categoryId())
                 .param("description", trimToNull(request.description()))
+                .update();
+    }
+
+    public void updateCopyStatus(long copyId, String status) {
+        jdbcClient.sql("update book_copy set status = :status where id = :copyId")
+                .param("status", status)
+                .param("copyId", copyId)
+                .update();
+    }
+
+    public void updateCopyLocation(long copyId, String shelfLocation) {
+        jdbcClient.sql("update book_copy set shelf_location = :shelfLocation where id = :copyId")
+                .param("shelfLocation", trimToNull(shelfLocation))
+                .param("copyId", copyId)
                 .update();
     }
 
