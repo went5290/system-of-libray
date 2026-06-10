@@ -2,6 +2,12 @@
 
 基于 Vue 3、Spring Boot 和 Oracle 12c 的前后端分离图书馆管理系统。
 
+## 本机快速启动
+
+确保 Oracle 数据库服务已启动后，双击根目录的 `start-library.cmd`。后端尚未运行时，按提示输入 `LIBRARY_APP` 数据库密码。
+
+系统启动后会自动打开管理页面。停止系统时双击 `stop-library.cmd`。
+
 ## 当前结构
 
 ```text
