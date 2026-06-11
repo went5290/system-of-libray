@@ -48,4 +48,24 @@ public class BookService {
         operationLogService.record("CREATE_BOOK_COPY", "BOOK_COPY", id, "登记馆藏副本：" + barcode);
         return new BookCopyCreateResponse(id, bookId, barcode, "AVAILABLE");
     }
+
+    @Transactional
+    public BookUpdateResponse update(long bookId, BookCreateRequest request) {
+        String isbn = request.isbn().trim();
+        String title = request.title().trim();
+
+        if (!bookRepository.bookExists(bookId)) {
+            throw new IllegalArgumentException("书目不存在");
+        }
+        if (!bookRepository.categoryExists(request.categoryId())) {
+            throw new IllegalArgumentException("图书分类不存在");
+        }
+        if (bookRepository.isbnExistsForOtherBook(isbn, bookId)) {
+            throw new IllegalArgumentException("ISBN 已存在");
+        }
+
+        bookRepository.update(bookId, request, isbn, title);
+        operationLogService.record("UPDATE_BOOK", "BOOK", bookId, "编辑书目：" + title + "，ISBN：" + isbn);
+        return new BookUpdateResponse(bookId, isbn, title);
+    }
 }

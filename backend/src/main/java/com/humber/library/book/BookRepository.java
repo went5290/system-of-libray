@@ -16,7 +16,8 @@ public class BookRepository {
     public List<BookSummary> search(String keyword) {
         String normalized = "%" + (keyword == null ? "" : keyword.trim().toLowerCase()) + "%";
         return jdbcClient.sql("""
-                select b.id, b.isbn, b.title, b.author, b.publisher, c.category_name,
+                select b.id, b.isbn, b.title, b.author, b.publisher, b.publish_date,
+                       b.category_id, c.category_name, b.description,
                        count(bc.id) total_copies,
                        sum(case when bc.status = 'AVAILABLE' then 1 else 0 end) available_copies
                   from book b
@@ -25,7 +26,8 @@ public class BookRepository {
                  where lower(b.title) like :keyword
                     or lower(nvl(b.author, '')) like :keyword
                     or lower(nvl(b.isbn, '')) like :keyword
-                 group by b.id, b.isbn, b.title, b.author, b.publisher, c.category_name
+                 group by b.id, b.isbn, b.title, b.author, b.publisher, b.publish_date,
+                          b.category_id, c.category_name, b.description
                  order by b.title
                 """)
                 .param("keyword", normalized)
@@ -35,7 +37,10 @@ public class BookRepository {
                         rs.getString("title"),
                         rs.getString("author"),
                         rs.getString("publisher"),
+                        rs.getDate("publish_date") == null ? null : rs.getDate("publish_date").toLocalDate(),
+                        rs.getObject("category_id", Long.class),
                         rs.getString("category_name"),
+                        rs.getString("description"),
                         rs.getInt("total_copies"),
                         rs.getInt("available_copies")))
                 .list();
@@ -77,6 +82,14 @@ public class BookRepository {
                 .single() > 0;
     }
 
+    public boolean isbnExistsForOtherBook(String isbn, long bookId) {
+        return jdbcClient.sql("select count(*) from book where isbn = :isbn and id <> :bookId")
+                .param("isbn", isbn)
+                .param("bookId", bookId)
+                .query(Integer.class)
+                .single() > 0;
+    }
+
     public long nextId() {
         return jdbcClient.sql("select seq_book.nextval from dual")
                 .query(Long.class)
@@ -114,6 +127,30 @@ public class BookRepository {
                 .param("bookId", bookId)
                 .param("barcode", barcode)
                 .param("shelfLocation", trimToNull(shelfLocation))
+                .update();
+    }
+
+    public void update(long id, BookCreateRequest request, String isbn, String title) {
+        jdbcClient.sql("""
+                update book
+                   set isbn = :isbn,
+                       title = :title,
+                       author = :author,
+                       publisher = :publisher,
+                       publish_date = :publishDate,
+                       category_id = :categoryId,
+                       description = :description,
+                       updated_at = current_timestamp
+                 where id = :id
+                """)
+                .param("id", id)
+                .param("isbn", isbn)
+                .param("title", title)
+                .param("author", trimToNull(request.author()))
+                .param("publisher", trimToNull(request.publisher()))
+                .param("publishDate", request.publishDate() == null ? null : Date.valueOf(request.publishDate()))
+                .param("categoryId", request.categoryId())
+                .param("description", trimToNull(request.description()))
                 .update();
     }
 

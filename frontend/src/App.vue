@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Collection, List, Plus, Reading, Search, Switch, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { borrowBook, createBook, createBookCopy, createReader, getBookCategories, getOverview, login, payFine, renewBorrow, returnBook, searchBooks, searchBorrowRecords, searchOperationLogs, searchReaders, setAuthToken, setUnauthorizedHandler, updateReaderStatus } from './api'
+import { borrowBook, createBook, createBookCopy, createReader, getBookCategories, getOverview, login, payFine, renewBorrow, returnBook, searchBooks, searchBorrowRecords, searchOperationLogs, searchReaders, setAuthToken, setUnauthorizedHandler, updateBook, updateReaderStatus } from './api'
 
 const SESSION_KEY = 'library-console-user'
 
@@ -47,6 +47,7 @@ const errorMessage = ref('')
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const formRef = ref()
+const editingBook = ref(null)
 const copyDialogVisible = ref(false)
 const copySubmitting = ref(false)
 const copyFormRef = ref()
@@ -211,6 +212,26 @@ async function loadBooks() {
 async function openCreateDialog() {
   try {
     categories.value = await getBookCategories()
+    editingBook.value = null
+    dialogVisible.value = true
+  } catch {
+    ElMessage.error('无法加载图书分类')
+  }
+}
+
+async function openEditDialog(book) {
+  try {
+    categories.value = await getBookCategories()
+    editingBook.value = book
+    Object.assign(form, {
+      isbn: book.isbn,
+      title: book.title,
+      author: book.author || '',
+      publisher: book.publisher || '',
+      publishDate: book.publishDate || '',
+      categoryId: book.categoryId,
+      description: book.description || ''
+    })
     dialogVisible.value = true
   } catch {
     ElMessage.error('无法加载图书分类')
@@ -228,6 +249,7 @@ function resetForm() {
     description: ''
   })
   formRef.value?.clearValidate()
+  editingBook.value = null
 }
 
 async function submitBook() {
@@ -236,14 +258,20 @@ async function submitBook() {
 
   submitting.value = true
   try {
-    await createBook({ ...form, publishDate: form.publishDate || null })
-    ElMessage.success('书目新增成功')
+    const payload = { ...form, publishDate: form.publishDate || null }
+    if (editingBook.value) {
+      await updateBook(editingBook.value.id, payload)
+      ElMessage.success('书目编辑成功')
+    } else {
+      await createBook(payload)
+      ElMessage.success('书目新增成功')
+      keyword.value = ''
+    }
     dialogVisible.value = false
     resetForm()
-    keyword.value = ''
     await loadBooks()
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || '新增书目失败')
+    ElMessage.error(error.response?.data?.message || (editingBook.value ? '编辑书目失败' : '新增书目失败'))
   } finally {
     submitting.value = false
   }
@@ -337,6 +365,7 @@ function borrowStatusType(status) {
 function logActionLabel(action) {
   return {
     CREATE_BOOK: '新增书目',
+    UPDATE_BOOK: '编辑书目',
     CREATE_BOOK_COPY: '登记副本',
     CREATE_READER: '新增读者',
     UPDATE_READER_STATUS: '更新读者状态',
@@ -641,6 +670,7 @@ onMounted(async () => {
           </el-table-column>
           <el-table-column label="操作" width="120" fixed="right">
             <template #default="{ row }">
+              <el-button link type="primary" @click="openEditDialog(row)">编辑</el-button>
               <el-button link type="primary" @click="openCopyDialog(row)">登记副本</el-button>
             </template>
           </el-table-column>
@@ -904,7 +934,7 @@ onMounted(async () => {
     </el-main>
   </el-container>
 
-  <el-dialog v-model="dialogVisible" title="新增书目" width="560px" @closed="resetForm">
+  <el-dialog v-model="dialogVisible" :title="editingBook ? '编辑书目' : '新增书目'" width="560px" @closed="resetForm">
     <el-form ref="formRef" :model="form" :rules="rules" label-width="88px">
       <el-form-item label="ISBN" prop="isbn"><el-input v-model="form.isbn" maxlength="20" /></el-form-item>
       <el-form-item label="书名" prop="title"><el-input v-model="form.title" maxlength="200" /></el-form-item>
@@ -922,7 +952,7 @@ onMounted(async () => {
     </el-form>
     <template #footer>
       <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="submitBook">确认新增</el-button>
+      <el-button type="primary" :loading="submitting" @click="submitBook">{{ editingBook ? '保存修改' : '确认新增' }}</el-button>
     </template>
   </el-dialog>
 

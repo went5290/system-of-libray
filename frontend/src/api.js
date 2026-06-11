@@ -56,6 +56,11 @@ export async function createBook(book) {
   return response.data
 }
 
+export async function updateBook(bookId, book) {
+  const response = await client.put(`/books/${bookId}`, book)
+  return response.data
+}
+
 export async function createBookCopy(bookId, copy) {
   const response = await client.post(`/books/${bookId}/copies`, copy)
   return response.data
